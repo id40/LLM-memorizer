@@ -67,7 +67,7 @@ async def save_memory(ctx: Context, text: str) -> str:
         return "Successfully saved memory: " 
             
     except Exception as e:
-        return "Error saving memory: " + str(e)
+        return "Error saving memory: " 
 
 @mcp.tool()
 async def search_memories_by_datetime(ctx: Context, target_date: str = None, target_time: str = None) -> str:
@@ -80,26 +80,26 @@ async def search_memories_by_datetime(ctx: Context, target_date: str = None, tar
         target_time: Time filter in HH:MM:SS format
     """
     try:
-        # Get the memory client from context
+        
         memory_client = ctx.request_context.lifespan_context.LLM_client
         
-        # Get all memories (using an empty query string to get everything)
+        
         memories = memory_client.search("", user_id=DEFAULT_USER_ID)
         
-        # Process the results based on the memory format
+        
         if isinstance(memories, dict) and "results" in memories:
             memory = memories["results"]
         else:
             memory = memories
         
-        # Filter memories by date/time
+        
         results = []
         for mem in memories:
-            # Check if memory has timestamp info
+            
             if "timestamp" in mem:
                 datetime = mem["timestamp"]
                 
-                # Check date and time filters
+                
                 matches = True
                 if target_date and target_date not in datetime:
                     matches = False
@@ -117,10 +117,10 @@ async def search_memories_by_datetime(ctx: Context, target_date: str = None, tar
 async def main():
     transport = os.getenv("TRANSPORT", "sse")
     if transport == 'sse':
-        # Run the MCP server with sse transport
+        
         await mcp.run_sse_async()
     else:
-        # Run the MCP server with stdio transport
+        
         await mcp.run_stdio_async()
 
 if __name__ == "__main__":
