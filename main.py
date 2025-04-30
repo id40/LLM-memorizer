@@ -70,7 +70,7 @@ async def save_memory(ctx: Context, text: str) -> str:
         return "Error saving memory: " 
 
 @mcp.tool()
-async def search_memories_by_datetime(ctx: Context, target_date: str = None, target_time: str = None) -> str:
+async def search_memories_by_datetime(ctx: Context, date: str = None, time: str = None) -> str:
     """
     Search memories by date and time.
     
@@ -101,9 +101,9 @@ async def search_memories_by_datetime(ctx: Context, target_date: str = None, tar
                 
                 
                 matches = True
-                if target_date and target_date not in datetime:
+                if date and date not in datetime:
                     matches = False
-                if target_time and target_time not in datetime:
+                if time and time not in datetime:
                     matches = False
                     
                 if matches:
