@@ -1,0 +1,4 @@
+mcp-server
+python-dotenv
+mem0
+supabase-py 

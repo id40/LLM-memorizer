@@ -3,13 +3,12 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from dotenv import load_dotenv
-from mem0 import Memory
+from supabase import create_client, Client
 import asyncio
 import json
 import os
 import datetime 
 
-from LLM_DB import get_LLM_Memorizer_client
 
 load_dotenv()
 
@@ -18,7 +17,7 @@ DEFAULT_USER_ID = "user"
 @dataclass
 class LLMContext:
     """Context for the LLM Memorizer MCP server."""
-    LLM_client: Memory
+    supabase: Client
 
 @asynccontextmanager
 async def LLM_lifespan(server: FastMCP) -> AsyncIterator[LLMContext]:
@@ -29,90 +28,116 @@ async def LLM_lifespan(server: FastMCP) -> AsyncIterator[LLMContext]:
         server: The FastMCP server instance
         
     Yields:
-        LLmContext: The context containing the LLM client
+        LLmContext: The context containing the LLM client and Supabase client
     """
-    LLM_client = get_LLM_Memorizer_client
+
+    
+    # Initialize Supabase client
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    if not supabase_url or not supabase_key:
+        raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in .env file")
+    
+    supabase = create_client(supabase_url, supabase_key)
     
     try:
-        yield LLMContext(LLM_client=LLM_client)
+        yield LLMContext( supabase=supabase)
     finally:
         pass
 
 mcp = FastMCP(
     "mcp-LLM-Memorizer",
-    description="MCP server for long term memory storage and retrieval with Mem0",
+    description="MCP server for long term memory storage and retrieval with Supabase",
     lifespan=LLM_lifespan,
     host=os.getenv("HOST", "0.0.0.0"),
     port=os.getenv("PORT", "8050")
+
 )        
 
 @mcp.tool()
 async def save_memory(ctx: Context, text: str) -> str:
     """
-    Save information to your long-term memory.
+    Save information to your long-term memory using Supabase.
     
     Args:
-        ctx: The context containing the LLM client
+        ctx: The context containing the Supabase client
         text: The content to store in memory
     """
     try:
-        x=datetime.datetime.now()
-
-        memory_client = ctx.request_context.lifespan_context.LLM_client
+        x = datetime.datetime.now()
+        supabase = ctx.request_context.lifespan_context.supabase
         
         message = [{"role": "user", "content": text}]
         
-        memory_client.add(x,message, user_id=DEFAULT_USER_ID)
+        # Save to Supabase only
+        data = {
+            "user_id": DEFAULT_USER_ID,
+            "content": text,
+            "timestamp": x.isoformat(),
+            "message": json.dumps(message)
+        }
+        supabase.table("memories").insert(data).execute()
         
-        return "Successfully saved memory: " 
+        return "Successfully saved memory to Supabase"
             
     except Exception as e:
-        return "Error saving memory: " 
+        return f"Error saving memory: {str(e)}"
 
 @mcp.tool()
-async def search_memories_by_datetime(ctx: Context, date: str = None, time: str = None) -> str:
+async def search_memories(ctx: Context, date: str = None, time: str = None) -> str:
     """
-    Search memories by date and time.
+    Search memories by date and time from Supabase.
     
     Args:
-        ctx: The context containing the LLM client
-        target_date: Date filter in YYYY-MM-DD format
-        target_time: Time filter in HH:MM:SS format
+        ctx: The context containing the Supabase client
+        date: Date filter in YYYY-MM-DD format
+        time: Time filter in HH:MM:SS format
     """
     try:
+        supabase = ctx.request_context.lifespan_context.supabase
         
-        memory_client = ctx.request_context.lifespan_context.LLM_client
+        # Search in Supabase
+        query = supabase.table("memories").select("*").eq("user_id", DEFAULT_USER_ID)
         
-        
-        memories = memory_client.search("", user_id=DEFAULT_USER_ID)
-        
-        
-        if isinstance(memories, dict) and "results" in memories:
-            memory = memories["results"]
-        else:
-            memory = memories
-        
-        
-        results = []
-        for mem in memories:
+        if date:
+            query = query.ilike("timestamp", f"%{date}%")
+        if time:
+            query = query.ilike("timestamp", f"%{time}%")
             
-            if "timestamp" in mem:
-                datetime = mem["timestamp"]
-                
-                
-                matches = True
-                if date and date not in datetime:
-                    matches = False
-                if time and time not in datetime:
-                    matches = False
-                    
-                if matches:
-                    results.append(memory)
+        supabase_results = query.execute()
+        
+        # Get results
+        results = []
+        
+        # Add Supabase results
+        if hasattr(supabase_results, 'data'):
+            results.extend(supabase_results.data)
         
         return str(results)
             
     except Exception as e:
-        return "Error searching memories: " 
+        return f"Error searching memories !"
+        
+        # Process Mem0 results
+        for mem in memories:
+            if "timestamp" in mem:
+                datetime_str = mem["timestamp"]
+                matches = True
+                if date and date not in datetime_str:
+                    matches = False
+                if time and time not in datetime_str:
+                    matches = False
+                if matches:
+                    results.append(mem)
+        
+        # Add Supabase results
+        if hasattr(supabase_results, 'data'):
+            results.extend(supabase_results.data)
+        
+        return str(results)
+            
+    except Exception as e:
+        return f"Error searching memories: {str(e)}"
 
 async def main():
     transport = os.getenv("TRANSPORT", "sse")
